@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Financial Transactions by Purpose</title>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f9f9f9;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 20px;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        .axis-label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .axis text {
+            font-size: 10px;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            padding: 8px;
+            font-size: 12px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .grid-line {
+            stroke: #e0e0e0;
+            stroke-width: 1px;
+        }
+        
+        .cell-bg {
+            fill: transparent;
+            transition: fill 0.2s;
+        }
+        
+        .cell-bg:hover {
+            fill: #f0f0f0;
+        }
+
+        .legend text {
+            font-size: 11px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Global Financial Transactions by Purpose</h1>
+    <p>
+        Commitment amount of the top 5 donation purposes between the top 20 donors and top 10 recipients.
+    </p>
+
+    <div id="visualization"></div>
+    <div id="tooltip" class="tooltip"></div>
+
+    <script>
+        function wrapYAxisLabels(selection, width) {
+            selection.each(function() {
+                const text = d3.select(this);
+                const raw = text.text();
+                const words = raw.split(/\s+/).filter(Boolean);
+                if (!words.length || !width || width <= 0) {
+                    return;
+                }
+
+                const x = text.attr("x");
+                const y = text.attr("y");
+                const baseDy = parseFloat(text.attr("dy")) || 0;
+                const lineHeight = 1.1;
+
+                // Temporary tspan for measuring candidate lines
+                const measureSpan = text.text(null)
+                    .append("tspan")
+                    .attr("x", x)
+                    .attr("y", y)
+                    .attr("dy", `${baseDy}em`);
+
+                const lines = [];
+                let currentLine = [];
+
+                words.forEach((word, idx) => {
+                    currentLine.push(word);
+                    measureSpan.text(currentLine.join(" "));
+
+                    if (measureSpan.node().getComputedTextLength() > width && currentLine.length > 1) {
+                        currentLine.pop();
+                        lines.push(currentLine.join(" "));
+                        currentLine = [word];
+                        measureSpan.text(currentLine.join(" "));
+                    } else if (idx === words.length - 1) {
+                        lines.push(currentLine.join(" "));
+                    }
+                });
+
+                measureSpan.remove();
+
+                const offset = (lines.length - 1) / 2;
+                lines.forEach((lineText, i) => {
+                    text.append("tspan")
+                        .attr("x", x)
+                        .attr("y", y)
+                        .attr("dy", `${baseDy + (i - offset) * lineHeight}em`)
+                        .text(lineText);
+                });
+            });
+        }
+
+        async function createVisualization() {
+            // 1. Load Data
+            const data = await d3.csv("AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv", d => ({
+                donor: d.donor,
+                recipient: d.recipient,
+                purpose: d.coalesced_purpose_name,
+                amount: +d.commitment_amount_usd_constant_sum
+            }));
+
+            // 2. Data Processing
+
+            // a. Find Top 5 Purposes (by total amount)
+            const purposeRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.purpose);
+            const topPurposes = Array.from(purposeRollup)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(d => d[0]);
+
+            // b. Find Top 20 Donors (by total amount)
+            const donorRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.donor);
+            const topDonors = Array.from(donorRollup)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 20)
+                .map(d => d[0]);
+
+            // c. Find Top 10 Recipients (by total amount)
+            const recipientRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.recipient);
+            const topRecipients = Array.from(recipientRollup)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(d => d[0]);
+
+            // d. Filter Data
+            // Include only Top Donors, Top Recipients, and Top Purposes
+            const filteredData = data.filter(d => 
+                topDonors.includes(d.donor) && 
+                topRecipients.includes(d.recipient) && 
+                topPurposes.includes(d.purpose)
+            );
+
+            // e. Group by (Donor, Recipient)
+            // Map: "Donor|Recipient" -> [ {purpose, amount}, ... ]
+            const matrixMap = d3.rollup(filteredData, 
+                v => {
+                    const total = d3.sum(v, d => d.amount);
+                    const purposes = d3.rollup(v, sum => d3.sum(sum, d => d.amount), d => d.purpose);
+                    return {
+                        total: total,
+                        breakdown: Array.from(purposes).map(([p, a]) => ({ purpose: p, amount: a }))
+                    };
+                },
+                d => d.donor,
+                d => d.recipient
+            );
+
+            // 3. Visualization Setup
+            const cellSize = 40;
+            const margin = { top: 150, right: 200, bottom: 50, left: 250 };
+            const width = (topRecipients.length * cellSize); // Inner width
+            const height = (topDonors.length * cellSize);    // Inner height
+            
+            // Color Scale for Purposes
+            const colorScale = d3.scaleOrdinal()
+                .domain(topPurposes)
+                .range(d3.schemeTableau10); // Nice distinct colors
+
+            // Size Scale for Radius (Sqrt scale for area ~ amount)
+            const maxAmount = d3.max(Array.from(matrixMap.values()).flatMap(m => Array.from(m.values()).map(d => d.total))) || 0;
+            const radiusScale = d3.scaleSqrt()
+                .domain([0, maxAmount])
+                .range([0, cellSize / 2 - 2]); // Max radius fits in cell with padding
+
+            const svg = d3.select("#visualization")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            // 4. Draw Axes
+            
+            // X Axis (Recipients) - Top
+            const xScale = d3.scaleBand()
+                .domain(topRecipients)
+                .range([0, width]);
+
+            svg.append("g")
+                .call(d3.axisTop(xScale))
+                .selectAll("text")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "start")
+                .attr("dx", "0.5em")
+                .attr("dy", "-0.5em");
+            
+            // X Axis Label
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -110)
+                .style("text-anchor", "middle")
+                .style("font-weight", "bold")
+                .text("Top 10 Recipients");
+
+            // Y Axis (Donors) - Left
+            const yScale = d3.scaleBand()
+                .domain(topDonors)
+                .range([0, height]);
+
+            const yAxis = svg.append("g")
+                .call(d3.axisLeft(yScale));
+
+            wrapYAxisLabels(yAxis.selectAll("text"), margin.left - 50);
+
+             // Y Axis Label
+             svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -height / 2)
+                .attr("y", -230)
+                .style("text-anchor", "middle")
+                .style("font-weight", "bold")
+                .text("Top 20 Donors");
+
+            // 5. Draw Grid
+            // Horizontal lines
+            svg.selectAll(".grid-line-h")
+                .data(topDonors)
+                .enter()
+                .append("line")
+                .attr("class", "grid-line")
+                .attr("x1", 0)
+                .attr("x2", width)
+                .attr("y1", d => yScale(d))
+                .attr("y2", d => yScale(d));
+            
+            // Vertical lines
+            svg.selectAll(".grid-line-v")
+                .data(topRecipients)
+                .enter()
+                .append("line")
+                .attr("class", "grid-line")
+                .attr("y1", 0)
+                .attr("y2", height)
+                .attr("x1", d => xScale(d))
+                .attr("x2", d => xScale(d));
+
+            // Border
+            svg.append("rect")
+                .attr("width", width)
+                .attr("height", height)
+                .style("fill", "none")
+                .style("stroke", "#ccc");
+
+            // 6. Draw Cells & Glyphs
+            const tooltip = d3.select("#tooltip");
+
+            // Iterate through all possible pairs to draw grid bg
+            topDonors.forEach(donor => {
+                topRecipients.forEach(recipient => {
+                    const cellGroup = svg.append("g")
+                        .attr("transform", `translate(${xScale(recipient) + cellSize/2}, ${yScale(donor) + cellSize/2})`);
+                    
+                    // Data for this cell
+                    const cellData = matrixMap.get(donor)?.get(recipient);
+
+                    // Background rect for hover target
+                    cellGroup.append("rect")
+                        .attr("x", -cellSize/2)
+                        .attr("y", -cellSize/2)
+                        .attr("width", cellSize)
+                        .attr("height", cellSize)
+                        .attr("class", "cell-bg");
+
+                    if (cellData) {
+                        const pie = d3.pie()
+                            .value(d => d.amount)
+                            .sort(null); // Keep order or sort by size? strict order is better for comparison, but sorted is easier to read. Let's use default sort (desc).
+                        
+                        const arcs = pie(cellData.breakdown);
+                        const radius = radiusScale(cellData.total);
+
+                        cellGroup.selectAll("path")
+                            .data(arcs)
+                            .enter()
+                            .append("path")
+                            .attr("d", d3.arc().innerRadius(0).outerRadius(radius))
+                            .attr("fill", d => colorScale(d.data.purpose))
+                            .style("stroke", "#fff")
+                            .style("stroke-width", "0.5px");
+
+                        // Tooltip Interaction
+                        cellGroup.on("mouseover", (event) => {
+                            tooltip.style("opacity", 1);
+                            
+                            let html = `<strong>${donor} → ${recipient}</strong><br/>`;
+                            html += `Total: $${d3.format(",.2f")(cellData.total)}<br/><hr/>`;
+                            cellData.breakdown.sort((a,b) => b.amount - a.amount).forEach(item => {
+                                html += `<span style="color:${colorScale(item.purpose)}">■</span> ${item.purpose}: $${d3.format(",.0f")(item.amount)} (${d3.format(".1%")(item.amount/cellData.total)})<br/>`;
+                            });
+
+                            tooltip.html(html)
+                                .style("left", (event.pageX + 15) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mousemove", (event) => {
+                            tooltip
+                                .style("left", (event.pageX + 15) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mouseout", () => {
+                            tooltip.style("opacity", 0);
+                        });
+                    }
+                });
+            });
+
+            // 7. Legend
+            const legend = svg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width + 20}, 0)`);
+
+            legend.append("text")
+                .attr("x", 0)
+                .attr("y", -10)
+                .style("font-weight", "bold")
+                .text("Purposes");
+
+            topPurposes.forEach((purpose, i) => {
+                const row = legend.append("g")
+                    .attr("transform", `translate(0, ${i * 20})`);
+                
+                row.append("rect")
+                    .attr("width", 12)
+                    .attr("height", 12)
+                    .attr("fill", colorScale(purpose));
+                
+                row.append("text")
+                    .attr("x", 20)
+                    .attr("y", 10)
+                    .text(purpose);
+            });
+        }
+
+        createVisualization();
+    </script>
+</body>
+
+</html>
