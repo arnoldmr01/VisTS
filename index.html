@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Visualization 1 – Donor–Recipient Overview (D3.js)</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 20px;
+    }
+    .axis text {
+      font-size: 11px;
+    }
+    .axis path,
+    .axis line {
+      stroke: #ccc;
+    }
+    .tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #999;
+      padding: 6px 8px;
+      font-size: 12px;
+      pointer-events: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .legend text {
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="title">Aid Flows Between Countries</div>
+  <div class="subtitle">
+    Top 20 donors × Top 10 recipients (total commitments over all years, USD constant).
+  </div>
+  <svg id="chart" width="1500" height="650"></svg>
+
+  <script>
+    // ==== CONFIG ====
+    const csvPath = "AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv"; // change if needed
+
+    const svg = d3.select("#chart");
+    const width  = +svg.attr("width");
+    const height = +svg.attr("height");
+
+    const margin = { top: 80, right: 150, bottom: 120, left: 400 };
+    const innerWidth  = width  - margin.left - margin.right;
+    const innerHeight = height - margin.top  - margin.bottom;
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Tooltip div
+    const tooltip = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
+    // ==== LOAD DATA ====
+    d3.csv(csvPath, d3.autoType).then(raw => {
+      // Expect columns: donor, recipient, commitment_amount_usd_constant, year, ...
+      // 1) Aggregate by donor + recipient (sum over all years & purposes)
+      const nested = d3.rollups(
+        raw,
+        v => d3.sum(v, d => d.commitment_amount_usd_constant_sum || 0),
+        d => d.donor,
+        d => d.recipient
+      );
+
+      // Turn nested into flat list of pairs
+      const pairs = [];
+      for (const [donor, recs] of nested) {
+        for (const [recipient, value] of recs) {
+          if (!donor || !recipient) continue; // skip missing names
+          if (!isFinite(value) ) continue;
+          pairs.push({ donor, recipient, value });
+        }
+      }
+
+      // 2) Compute total per donor and per recipient
+      const donorTotals = d3.rollups(
+        pairs,
+        v => d3.sum(v, d => d.value),
+        d => d.donor
+      ).sort((a, b) => d3.descending(a[1], b[1]));
+
+      const recipientTotals = d3.rollups(
+        pairs,
+        v => d3.sum(v, d => d.value),
+        d => d.recipient
+      ).sort((a, b) => d3.descending(a[1], b[1]));
+
+      // Top 20 donors & top 10 recipients
+      const topDonors     = new Set(donorTotals.slice(0, 20).map(d => d[0]));
+      const topRecipients = new Set(recipientTotals.slice(0, 10).map(d => d[0]));
+
+      // 3) Filter to only those pairs
+      const filteredPairs = pairs.filter(d =>
+        topDonors.has(d.donor) && topRecipients.has(d.recipient)
+      );
+
+      // Keep donors / recipients in sorted order by total
+      const donorOrder = donorTotals
+        .filter(([name]) => topDonors.has(name))
+        .map(([name]) => name);
+
+      const recipientOrder = recipientTotals
+        .filter(([name]) => topRecipients.has(name))
+        .map(([name]) => name);
+
+      // === SCALES ===
+      const x = d3.scaleBand()
+        .domain(recipientOrder)
+        .range([0, innerWidth])
+        .padding(0.05);
+
+      const y = d3.scaleBand()
+        .domain(donorOrder)
+        .range([0, innerHeight])
+        .padding(0.05);
+
+      const maxVal = d3.max(filteredPairs, d => d.value);
+
+      const color = d3.scaleSequential()
+        .domain([0, maxVal])
+        .interpolator(d3.interpolateBlues);
+
+      // === AXES ===
+      const xAxis = d3.axisBottom(x);
+      const yAxis = d3.axisLeft(y);
+
+      g.append("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(xAxis)
+        .selectAll("text")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
+
+      g.append("g")
+        .attr("class", "axis y-axis")
+        .call(yAxis);
+
+      g.append("text")
+        .attr("x", innerWidth / 2)
+        .attr("y", innerHeight + 70)
+        .attr("text-anchor", "middle")
+        .attr("font-size", 13)
+        .text("Recipients (Top 10 by total commitments)");
+
+    //   g.append("text")
+    //     .attr("x", -innerHeight / 2)
+    //     .attr("y", -160)
+    //     .attr("transform", "rotate(-90)")
+    //     .attr("text-anchor", "middle")
+    //     .attr("font-size", 13)
+    //     .text("Donors (Top 20 by total commitments)");
+
+    svg.append("text")
+    .attr("class", "y-axis-title")
+    .attr("text-anchor", "middle")
+    // 放在整張圖最左側 x=20，比任何 donor 名稱都還要左
+    .attr("transform", `translate(20, ${margin.top + innerHeight / 2}) rotate(-90)`)
+    .attr("font-size", 13)
+    .text("Donors (Top 20 by total commitments)");
+      // === HEATMAP CELLS ===
+      g.selectAll("rect.cell")
+        .data(filteredPairs)
+        .join("rect")
+        .attr("class", "cell")
+        .attr("x", d => x(d.recipient))
+        .attr("y", d => y(d.donor))
+        .attr("width", x.bandwidth())
+        .attr("height", y.bandwidth())
+        .attr("fill", d => color(d.value))
+        .on("mousemove", (event, d) => {
+          const formatter = d3.format(",.0f");
+          tooltip
+            .style("opacity", 1)
+            .html(
+              `<strong>Donor:</strong> ${d.donor}<br>
+               <strong>Recipient:</strong> ${d.recipient}<br>
+               <strong>Commitments:</strong> $${formatter(d.value)}`
+            )
+            .style("left", event.pageX + 12 + "px")
+            .style("top", event.pageY - 28 + "px");
+        })
+        .on("mouseout", () => {
+          tooltip.style("opacity", 0);
+        });
+
+      // === COLOR LEGEND ===
+      const legendWidth = 18;
+      const legendHeight = 160;
+
+      const legendScale = d3.scaleLinear()
+        .domain(color.domain())
+        .range([legendHeight, 0]);
+
+      const legendAxis = d3.axisRight(legendScale)
+        .ticks(5)
+        .tickFormat(d3.format(".2s"));
+
+      const defs = svg.append("defs");
+
+      const gradientId = "legend-gradient";
+      const gradient = defs.append("linearGradient")
+        .attr("id", gradientId)
+        .attr("x1", "0%")
+        .attr("x2", "0%")
+        .attr("y1", "100%")
+        .attr("y2", "0%");
+
+      const gradientStops = d3.range(0, 1.01, 0.1);
+      gradientStops.forEach(t => {
+        gradient.append("stop")
+          .attr("offset", `${t * 100}%`)
+          .attr("stop-color", color(legendScale.invert((1 - t) * legendHeight)));
+      });
+
+      const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform",
+          `translate(${margin.left + innerWidth + 40},${margin.top})`);
+
+      legend.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .style("fill", `url(#${gradientId})`);
+
+      legend.append("g")
+        .attr("transform", `translate(${legendWidth},0)`)
+        .call(legendAxis);
+
+      legend.append("text")
+        .attr("x", 0)
+        .attr("y", -10)
+        .attr("text-anchor", "start")
+        .text("Total commitments");
+
+    }).catch(err => {
+      console.error("Error loading or processing CSV:", err);
+    });
+  </script>
+</body>
+</html>
