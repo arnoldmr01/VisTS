@@ -57,12 +57,12 @@
         }
         
         .cell-bg {
-            fill: transparent;
-            transition: fill 0.2s;
+            stroke: rgba(0, 0, 0, 0.08);
+            transition: stroke 0.2s;
         }
         
         .cell-bg:hover {
-            fill: #f0f0f0;
+            stroke: rgba(0, 0, 0, 0.4);
         }
 
         .legend text {
@@ -145,10 +145,20 @@
 
             // a. Find Top 5 Purposes (by total amount)
             const purposeRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.purpose);
-            const topPurposes = Array.from(purposeRollup)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 5)
-                .map(d => d[0]);
+            const skipPurpose = "Sectors not specified";
+            const sortedPurposes = Array.from(purposeRollup)
+                .sort((a, b) => b[1] - a[1]);
+
+            const topPurposes = [];
+            for (const [purpose] of sortedPurposes) {
+                if (purpose === skipPurpose) {
+                    continue;
+                }
+                topPurposes.push(purpose);
+                if (topPurposes.length === 5) {
+                    break;
+                }
+            }
 
             // b. Find Top 20 Donors (by total amount)
             const donorRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.donor);
@@ -189,26 +199,33 @@
 
             // 3. Visualization Setup
             const cellSize = 40;
-            const margin = { top: 150, right: 200, bottom: 50, left: 250 };
-            const width = (topRecipients.length * cellSize); // Inner width
-            const height = (topDonors.length * cellSize);    // Inner height
+            const margin = { top: 150, right: 220, bottom: 50, left: 250 };
+            const width = topRecipients.length * cellSize; // Inner width
+            const height = topDonors.length * cellSize;    // Inner height
+            const pieRadius = cellSize * 0.35;
             
-            // Color Scale for Purposes
+            // Color Scale for Purposes (categorical)
             const colorScale = d3.scaleOrdinal()
                 .domain(topPurposes)
-                .range(d3.schemeTableau10); // Nice distinct colors
+                .range(d3.schemeTableau10);
 
-            // Size Scale for Radius (Sqrt scale for area ~ amount)
-            const maxAmount = d3.max(Array.from(matrixMap.values()).flatMap(m => Array.from(m.values()).map(d => d.total))) || 0;
-            const radiusScale = d3.scaleSqrt()
-                .domain([0, maxAmount])
-                .range([0, cellSize / 2 - 2]); // Max radius fits in cell with padding
+            // Amount encoding domain + sequential color scale
+            const cellTotals = Array.from(matrixMap.values())
+                .flatMap(m => Array.from(m.values()).map(d => d.total));
+            const maxAmount = d3.max(cellTotals) || 0;
+            const amountDomain = maxAmount > 0 ? [0, maxAmount] : [0, 1];
+            const amountColorScale = d3.scaleLinear()
+                .domain(amountDomain)
+                .range(["#e0ecf4", "#08306b"]);
 
-            const svg = d3.select("#visualization")
+            const rootSvg = d3.select("#visualization")
                 .append("svg")
                 .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-                .append("g")
+                .attr("height", height + margin.top + margin.bottom);
+
+            const defs = rootSvg.append("defs");
+
+            const svg = rootSvg.append("g")
                 .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
             // 4. Draw Axes
@@ -294,6 +311,7 @@
                     
                     // Data for this cell
                     const cellData = matrixMap.get(donor)?.get(recipient);
+                    const hasData = Boolean(cellData);
 
                     // Background rect for hover target
                     cellGroup.append("rect")
@@ -301,15 +319,17 @@
                         .attr("y", -cellSize/2)
                         .attr("width", cellSize)
                         .attr("height", cellSize)
-                        .attr("class", "cell-bg");
+                        .attr("class", "cell-bg")
+                        .attr("fill", hasData ? amountColorScale(cellData.total) : "transparent")
+                        .attr("fill-opacity", hasData ? 0.9 : 0);
 
-                    if (cellData) {
+                    if (hasData) {
                         const pie = d3.pie()
                             .value(d => d.amount)
                             .sort(null); // Keep order or sort by size? strict order is better for comparison, but sorted is easier to read. Let's use default sort (desc).
                         
                         const arcs = pie(cellData.breakdown);
-                        const radius = radiusScale(cellData.total);
+                        const radius = pieRadius;
 
                         cellGroup.selectAll("path")
                             .data(arcs)
@@ -371,6 +391,55 @@
                     .attr("y", 10)
                     .text(purpose);
             });
+
+            const gradientId = "amount-gradient";
+            const gradient = defs.append("linearGradient")
+                .attr("id", gradientId)
+                .attr("x1", "0%")
+                .attr("x2", "0%")
+                .attr("y1", "100%")
+                .attr("y2", "0%");
+
+            gradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", amountColorScale(amountDomain[0]));
+
+            gradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", amountColorScale(amountDomain[1]));
+
+            const gradientHeight = 140;
+            const amountLegend = svg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width + 20}, ${topPurposes.length * 20 + 40})`);
+
+            amountLegend.append("text")
+                .attr("x", 0)
+                .attr("y", -10)
+                .style("font-weight", "bold")
+                .text("Total amount");
+
+            amountLegend.append("rect")
+                .attr("width", 18)
+                .attr("height", gradientHeight)
+                .attr("fill", `url(#${gradientId})`);
+
+            const legendScale = d3.scaleLinear()
+                .domain(amountDomain)
+                .range([gradientHeight, 0]);
+
+            const tickValues = legendScale.ticks(6);
+            if (!tickValues.includes(0)) {
+                tickValues.push(0);
+            }
+
+            const legendAxis = d3.axisRight(legendScale)
+                .tickValues(tickValues.sort((a, b) => a - b))
+                .tickFormat(d => d === 0 ? "0" : d3.format(".2s")(d));
+
+            amountLegend.append("g")
+                .attr("transform", "translate(18, 0)")
+                .call(legendAxis);
         }
 
         createVisualization();
