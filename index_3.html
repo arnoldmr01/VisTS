@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualization 3: Full Interaction</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text-main: #2c3e50;
+            --text-sub: #7f8c8d;
+            --accent: #2980b9;
+            --border-radius: 16px;
+        }
+
+        body {
+            font-family: 'Avenir', 'Avenir Next', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-weight: bold;
+            font-size: 2em;
+            margin: 0 0 5px 0;
+            letter-spacing: normal;
+            color: #000;
+        }
+        
+        p.desc {
+            color: #666;
+            font-size: 1rem;
+            font-weight: 400;
+            max-width: 720px;
+            text-align: center;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        svg text {
+            font-family: 'Avenir', 'Avenir Next', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+        }
+
+        /* Control panel styling */
+        .controls {
+            background: var(--card-bg);
+            padding: 15px 30px;
+            border-radius: 50px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.5);
+            transition: transform 0.2s ease;
+        }
+        .controls:hover { transform: translateY(-2px); }
+
+        label {
+            font-weight: 700;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-sub);
+        }
+
+        select {
+            padding: 10px 20px;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 25px;
+            border: 1px solid #e0e0e0;
+            background-color: #f9f9f9;
+            color: var(--text-main);
+            min-width: 550px; 
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%232c3e50%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px top 50%;
+            background-size: 10px auto;
+        }
+        select:hover {
+            border-color: var(--accent);
+            background-color: #fff;
+            box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.1);
+        }
+
+        /* Chart container */
+        #chart-container {
+            background: var(--card-bg);
+            padding: 40px 50px 50px 50px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.06);
+            position: relative;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Axis styling */
+        .axis text { 
+            fill: #95a5a6; 
+            font-size: 12px; 
+            font-family: 'Avenir', sans-serif; 
+            font-weight: 500; 
+        }
+        .axis line { stroke: #ecf0f1; }
+        .axis path { display: none; }
+        
+        .grid line { 
+            stroke: #f0f3f4; 
+            stroke-dasharray: 4; 
+            stroke-width: 1px;
+        }
+
+        /* Stacked area layer styling */
+        .layer {
+            transition: opacity 0s ease, stroke-width 0.2s ease;
+            mix-blend-mode: multiply;
+        }
+
+        /* Tooltip styling */
+        .tooltip {
+            position: absolute;
+            background: rgba(30, 30, 30, 0.95);
+            color: #fff;
+            padding: 12px 18px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            pointer-events: none;
+            opacity: 0;
+            transform: translate(-50%, -100%);
+            margin-top: -15px;
+            z-index: 100;
+            transition: all 0.1s ease;
+            font-family: 'Avenir', sans-serif;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .tooltip-year { 
+            color: #bdc3c7; 
+            font-size: 11px; 
+            font-weight: 600;
+            margin-bottom: 5px; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        .tooltip-key { 
+            font-weight: 700; 
+            font-size: 15px; 
+            margin-bottom: 3px; 
+            color: #fff !important;
+        }
+        .tooltip-val { 
+            font-family: 'Avenir Next', sans-serif; 
+            font-size: 14px; 
+            font-weight: 500;
+            color: #3498db; 
+        }
+
+        /* Legend styling */
+        .legend-title { 
+            font-size: 11px; 
+            font-weight: 800; 
+            fill: #95a5a6; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        .legend-item { cursor: pointer; }
+        .legend-item rect { 
+            stroke: rgba(0,0,0,0.05); 
+            stroke-width: 1px;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        }
+        .legend-item text { 
+            font-size: 12px; 
+            fill: var(--text-main); 
+            font-weight: 500;
+            transition: opacity 0.2s, font-weight 0.2s; 
+        }
+        
+        .legend-item:hover rect { transform: scale(1.2); }
+        .legend-item:hover { opacity: 1; }
+        
+        /* Disabled legend item state */
+        .legend-item.disabled rect { fill: #ecf0f1 !important; stroke: none; }
+        .legend-item.disabled text { fill: #bdc3c7; text-decoration: line-through; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Global Aid Trends</h1>
+    <p class="desc">
+        Visualizing the temporal evolution of aid flows from the top 20 donors to top 10 recipients.
+    </p>
+
+    <div class="controls">
+        <label for="donorSelect">Donor Country</label>
+        <select id="donorSelect"></select>
+    </div>
+
+    <div id="chart-container">
+        <div id="chart"></div>
+    </div>
+    
+    <div id="tooltip" class="tooltip"></div>
+
+    <script>
+        // Canvas configuration
+        const margin = {top: 20, right: 240, bottom: 40, left: 60};
+        const width = 1000 - margin.left - margin.right;
+        const height = 520 - margin.top - margin.bottom;
+
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Scales
+        const x = d3.scaleLinear().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+        const color = d3.scaleOrdinal(d3.schemeTableau10); 
+
+        // Axis groups
+        const xAxisGroup = svg.append("g").attr("class", "axis").attr("transform", `translate(0,${height})`);
+        const yAxisGroup = svg.append("g").attr("class", "axis");
+        
+        // Grid lines
+        const xGrid = svg.append("g").attr("class", "grid").attr("transform", `translate(0,${height})`);
+        const yGrid = svg.append("g").attr("class", "grid");
+
+        // Axis labels
+        svg.append("text").attr("x", width).attr("y", height + 35).attr("text-anchor", "end")
+            .attr("fill", "#95a5a6").style("font-size", "11px").style("font-weight", "bold").text("YEAR");
+        
+        svg.append("text").attr("transform", "rotate(-90)").attr("y", -45).attr("text-anchor", "end")
+            .attr("fill", "#95a5a6").style("font-size", "11px").style("font-weight", "bold").text("DONATION (USD CONSTANT)");
+
+        const tooltip = d3.select("#tooltip");
+
+        d3.csv("AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv").then(function(rawData) {
+
+            // Data cleaning and validation
+            const cleanData = rawData
+                .map(d => ({
+                    donor: d.donor ? d.donor.trim() : "",
+                    recipient: d.recipient ? d.recipient.trim() : "",
+                    year: +d.year,
+                    amount: +d.commitment_amount_usd_constant_sum
+                }))
+                .filter(d => d.year > 1900 && d.year <= 2024); 
+
+            // Identify Top 20 Donors and Top 10 Recipients
+            const allRecipientSums = d3.rollup(cleanData, v => d3.sum(v, d => d.amount), d => d.recipient);
+            const globalTop10Recipients = Array.from(allRecipientSums)
+                .sort((a, b) => b[1] - a[1]).slice(0, 10).map(d => d[0]);
+
+            const allDonorSums = d3.rollup(cleanData, v => d3.sum(v, d => d.amount), d => d.donor);
+            const globalTop20Donors = Array.from(allDonorSums)
+                .sort((a, b) => b[1] - a[1]).slice(0, 20).map(d => d[0]);
+
+            const relevantData = cleanData.filter(d => 
+                globalTop20Donors.includes(d.donor) && globalTop10Recipients.includes(d.recipient)
+            );
+
+            // Sort donors and recipients by relevance
+            const donorRelevantSums = d3.rollup(relevantData, v => d3.sum(v, d => d.amount), d => d.donor);
+            const sortedDonorsForUI = globalTop20Donors.slice().sort((a, b) => (donorRelevantSums.get(b) || 0) - (donorRelevantSums.get(a) || 0));
+
+            const recipientRelevantSums = d3.rollup(relevantData, v => d3.sum(v, d => d.amount), d => d.recipient);
+            const sortedRecipientsForUI = globalTop10Recipients.slice().sort((a, b) => (recipientRelevantSums.get(b) || 0) - (recipientRelevantSums.get(a) || 0));
+
+            // Initialize dropdown and legend
+            const select = d3.select("#donorSelect");
+            select.selectAll("option")
+                .data(sortedDonorsForUI)
+                .enter().append("option").text(d => d).attr("value", d => d);
+
+            color.domain(sortedRecipientsForUI);
+            let activeRecipients = new Set(sortedRecipientsForUI);
+
+            // Render legend items
+            const legendGroup = svg.append("g").attr("transform", `translate(${width + 30}, 10)`);
+            legendGroup.append("text").attr("class", "legend-title").attr("x", 0).attr("y", -15).text("Filter Recipients");
+
+            const legendItems = legendGroup.selectAll(".legend-item")
+                .data(sortedRecipientsForUI)
+                .enter().append("g")
+                .attr("class", "legend-item")
+                .attr("transform", (d, i) => `translate(0, ${i * 32})`)
+                .on("click", function(event, d) {
+                    if (activeRecipients.has(d)) {
+                        activeRecipients.delete(d);
+                        d3.select(this).classed("disabled", true);
+                    } else {
+                        activeRecipients.add(d);
+                        d3.select(this).classed("disabled", false);
+                    }
+                    updateChart(select.property("value"));
+                })
+                // Legend hover interaction: highlight selected layer
+                .on("mouseover", function(event, d) {
+                    if (!activeRecipients.has(d)) return;
+                    
+                    svg.selectAll(".layer").transition().duration(200).style("opacity", 0.15);
+                    const targetLayer = svg.selectAll(".layer").filter(l => l.key === d);
+                    
+                    targetLayer.raise(); // Bring selected layer to front
+                    
+                    const soloArea = d3.area()
+                        .x(dd => x(dd.data.year))
+                        .y0(y(0))
+                        .y1(dd => y(dd[1] - dd[0]))
+                        .curve(d3.curveMonotoneX);
+                        
+                    targetLayer.transition().duration(200).style("opacity", 1)
+                        .attr("d", layerData => soloArea(layerData))
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2.5); // 统一线宽
+                })
+                .on("mouseout", function(event, d) {
+                    if (!activeRecipients.has(d)) return;
+                    
+                    const area = d3.area()
+                        .x(dd => x(dd.data.year))
+                        .y0(dd => y(dd[0]))
+                        .y1(dd => y(dd[1]))
+                        .curve(d3.curveMonotoneX);
+                        
+                    svg.selectAll(".layer").transition().duration(200).style("opacity", 0.85)
+                        .attr("d", layerData => area(layerData))
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 1.5);
+                });
+
+            legendItems.append("rect")
+                .attr("width", 16).attr("height", 16).attr("rx", 4)
+                .attr("fill", d => color(d));
+
+            legendItems.append("text")
+                .attr("x", 24).attr("y", 13)
+                .text(d => d.length > 25 ? d.substring(0, 25) + "..." : d)
+                .append("title").text(d => d);
+
+            // Main chart update function
+            function updateChart(selectedDonor) {
+                const currentData = relevantData.filter(d => d.donor === selectedDonor && activeRecipients.has(d.recipient));
+
+                if (currentData.length === 0) {
+                    svg.selectAll(".layer").remove();
+                    xAxisGroup.call(d3.axisBottom(x).ticks(0));
+                    yAxisGroup.call(d3.axisLeft(y).ticks(0));
+                    return;
+                }
+
+                const years = d3.extent(currentData, d => d.year);
+                let startYear = years[0], endYear = years[1];
+                if (startYear === endYear) { startYear -= 1; endYear += 1; }
+
+                const chartData = [];
+                const stackKeys = sortedRecipientsForUI.filter(r => activeRecipients.has(r));
+
+                for (let y = startYear; y <= endYear; y++) {
+                    const row = { year: y };
+                    stackKeys.forEach(k => row[k] = 0);
+                    currentData.filter(d => d.year === y).forEach(r => row[r.recipient] += r.amount);
+                    chartData.push(row);
+                }
+
+                const stack = d3.stack().keys(stackKeys).order(d3.stackOrderNone).offset(d3.stackOffsetNone);
+                const series = stack(chartData);
+
+                x.domain([startYear, endYear]);
+                const maxVal = d3.max(series, layer => d3.max(layer, d => d[1])) || 0;
+                y.domain([0, maxVal * 1.1]).nice();
+
+                const area = d3.area()
+                    .x(d => x(d.data.year))
+                    .y0(d => y(d[0]))
+                    .y1(d => y(d[1]))
+                    .curve(d3.curveMonotoneX); 
+
+                const layers = svg.selectAll(".layer").data(series, d => d.key);
+
+                layers.exit().transition().duration(500).style("opacity", 0).remove();
+
+                const layersEnter = layers.enter().append("path")
+                    .attr("class", "layer")
+                    .style("fill", d => color(d.key))
+                    .style("opacity", 0);
+
+                layersEnter.merge(layers)
+                    .transition().duration(800)
+                    .style("opacity", 0.85) 
+                    .attr("d", area)
+                    .attr("stroke", "#fff") 
+                    .attr("stroke-width", 1.5)
+                    .attr("stroke-linejoin", "round");
+
+                xAxisGroup.transition().duration(800).call(d3.axisBottom(x).tickFormat(d3.format("d")).ticks(Math.min(endYear - startYear, 10)));
+                yAxisGroup.transition().duration(800).call(d3.axisLeft(y).tickFormat(d => d3.format(".2s")(d).replace("G", "B")));
+                xGrid.transition().duration(800).call(d3.axisBottom(x).tickFormat("").ticks(Math.min(endYear - startYear, 10)).tickSize(-height));
+                yGrid.transition().duration(800).call(d3.axisLeft(y).tickFormat("").tickSize(-width));
+
+                // Chart area hover: show tooltip and highlight layer
+                svg.selectAll(".layer")
+                    .on("mousemove", function(event, d) {
+                        const [mouseX] = d3.pointer(event);
+                        const hoveredYear = Math.round(x.invert(mouseX));
+                        
+                        if (hoveredYear >= startYear && hoveredYear <= endYear) {
+                            const yearData = d.find(item => item.data.year === hoveredYear);
+                            const val = yearData ? (yearData[1] - yearData[0]) : 0;
+                            
+                            if (val > 0 || stackKeys.length === 1) {
+                                tooltip.style("opacity", 1)
+                                    .style("left", event.pageX + "px")
+                                    .style("top", event.pageY + "px")
+                                    .html(`
+                                        <div class="tooltip-year">${hoveredYear}</div>
+                                        <div class="tooltip-key">${d.key}</div>
+                                        <div class="tooltip-val">$${d3.format(",.2s")(val).replace("G", "B")}</div>
+                                    `);
+                                
+                                // Fade other layers for contrast
+                                d3.selectAll(".layer")
+                                    .transition().duration(100)
+                                    .style("opacity", 0.15)
+                                    .attr("stroke-width", 0.5);
+
+                                // Highlight current layer
+                                d3.select(this)
+                                    .raise() // Bring to front so bold stroke is visible
+                                    .transition().duration(100)
+                                    .style("opacity", 1)
+                                    .attr("stroke", "#fff")
+                                    .attr("stroke-width", 2.5);
+                            }
+                        }
+                    })
+                    .on("mouseleave", function() {
+                        tooltip.style("opacity", 0);
+                        d3.selectAll(".layer")
+                            .transition().duration(200)
+                            .style("opacity", 0.85)
+                            .attr("stroke", "#fff")
+                            .attr("stroke-width", 1.5);
+                    });
+            }
+
+            updateChart(sortedDonorsForUI[0]);
+
+            select.on("change", function() {
+                activeRecipients = new Set(sortedRecipientsForUI);
+                d3.selectAll(".legend-item").classed("disabled", false);
+                updateChart(this.value);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisTS</title>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Avenir', 'Avenir Next', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
+            overflow: hidden;
+        }
+
+        /* Navigation Bar */
+        .nav-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .nav-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1a1a2e;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            color: #555;
+            border-radius: 25px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            outline: none;
+            white-space: nowrap;
+        }
+
+        .nav-btn:hover {
+            border-color: #2563eb;
+            color: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+
+        .nav-btn.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        /* Content Container */
+        .content-wrapper {
+            position: fixed;
+            top: 70px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+        }
+
+        .viz-frame {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease-in-out, visibility 0.5s;
+            transform: translateX(0);
+        }
+
+        .viz-frame.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Slide animation classes */
+        .viz-frame.slide-out-left {
+            animation: slideOutLeft 0.5s ease-in-out forwards;
+        }
+
+        .viz-frame.slide-out-right {
+            animation: slideOutRight 0.5s ease-in-out forwards;
+        }
+
+        .viz-frame.slide-in-left {
+            animation: slideInLeft 0.5s ease-in-out forwards;
+        }
+
+        .viz-frame.slide-in-right {
+            animation: slideInRight 0.5s ease-in-out forwards;
+        }
+
+        @keyframes slideOutLeft {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Fade animation (alternative) */
+        .viz-frame.fade-out {
+            animation: fadeOut 0.4s ease-in-out forwards;
+        }
+
+        .viz-frame.fade-in {
+            animation: fadeIn 0.4s ease-in-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Loading indicator */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2563eb;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Description panel */
+        .description {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #666;
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 768px) {
+            .nav-content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .nav-buttons {
+                flex-direction: column;
+            }
+
+            .nav-btn {
+                width: 100%;
+            }
+
+            .content-wrapper {
+                top: 180px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <div class="nav-container">
+        <div class="nav-content">
+            <h1 class="nav-title">Graph Design (Networks) on AidData Dataset</h1>
+            <div class="nav-buttons">
+                <button class="nav-btn active" onclick="switchVisualization(1)" data-viz="1">
+                    Visualization 1: Aid Flow Overview
+                </button>
+                <button class="nav-btn" onclick="switchVisualization(2)" data-viz="2">
+                    Visualization 2: Donation Purposes
+                </button>
+                <button class="nav-btn" onclick="switchVisualization(3)" data-viz="3">
+                    Visualization 3: Time-Varying Patterns
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+        <!-- Loading indicator (shown initially) -->
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading visualization...</p>
+        </div>
+
+        <!-- Visualization 1: Aid Flow Sankey -->
+        <iframe id="viz1" class="viz-frame active" src="index_1.html"></iframe>
+
+        <!-- Visualization 2: Purpose Matrix -->
+        <iframe id="viz2" class="viz-frame" src="index_2.html"></iframe>
+
+        <!-- Visualization 3: Time-Varying -->
+        <iframe id="viz3" class="viz-frame" src="index_3.html"></iframe>
+    </div>
+
+    <script>
+        let currentViz = 1;
+        let loadedViz = new Set([1]); // Track which visualizations have been loaded
+        let isTransitioning = false; // Prevent rapid clicking during transition
+
+        // Hide loading indicator once first iframe loads
+        document.getElementById('viz1').addEventListener('load', function() {
+            document.getElementById('loading').style.display = 'none';
+        });
+
+        function switchVisualization(vizNumber) {
+            if (currentViz === vizNumber || isTransitioning) return;
+            
+            isTransitioning = true;
+            const previousViz = currentViz;
+            currentViz = vizNumber;
+            
+            // Update button states
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const btnViz = parseInt(btn.getAttribute('data-viz'));
+                btn.classList.toggle('active', btnViz === vizNumber);
+            });
+            
+            // Get current and target frames
+            const currentFrame = document.getElementById('viz' + previousViz);
+            const targetFrame = document.getElementById('viz' + vizNumber);
+            
+            // Determine animation direction (left or right)
+            const direction = vizNumber > previousViz ? 'right' : 'left';
+            
+            // Remove any existing animation classes
+            document.querySelectorAll('.viz-frame').forEach(frame => {
+                frame.classList.remove('slide-out-left', 'slide-out-right', 'slide-in-left', 'slide-in-right', 'fade-out', 'fade-in');
+            });
+            
+            // Animate out current frame
+            if (direction === 'right') {
+                currentFrame.classList.add('slide-out-left');
+            } else {
+                currentFrame.classList.add('slide-out-right');
+            }
+            
+            // After a brief delay, animate in the new frame
+            setTimeout(() => {
+                currentFrame.classList.remove('active');
+                targetFrame.classList.add('active');
+                
+                if (direction === 'right') {
+                    targetFrame.classList.add('slide-in-right');
+                } else {
+                    targetFrame.classList.add('slide-in-left');
+                }
+                
+                // Mark visualization as loaded
+                loadedViz.add(vizNumber);
+                
+                // Show loading indicator if frame hasn't loaded yet
+                const loadingEl = document.getElementById('loading');
+                if (!targetFrame.src || targetFrame.src === 'about:blank') {
+                    loadingEl.style.display = 'block';
+                    targetFrame.addEventListener('load', function() {
+                        loadingEl.style.display = 'none';
+                    }, { once: true });
+                }
+                
+                // Reset transition lock after animation completes
+                setTimeout(() => {
+                    isTransitioning = false;
+                }, 500);
+            }, 100);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key >= '1' && e.key <= '3') {
+                switchVisualization(parseInt(e.key));
+            }
+            // Arrow keys for navigation
+            if (e.key === 'ArrowLeft' && currentViz > 1) {
+                switchVisualization(currentViz - 1);
+            }
+            if (e.key === 'ArrowRight' && currentViz < 3) {
+                switchVisualization(currentViz + 1);
+            }
+        });
+
+        // Add description for each visualization (optional)
+        const descriptions = {
+            1: "Overview of relationships between countries showing major donors and recipients",
+            2: "Composition of donation purposes between country pairs",
+            3: "Time-varying patterns of donations and how they change over years"
+        };
+    </script>
+</body>
+</html>

@@ -10,15 +10,18 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {
-            font-family: sans-serif;
+            font-family: 'Avenir', 'Avenir Next', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background-color: #f9f9f9;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
         }
 
+        /* Heading and paragraph styles */
         h1 {
             margin-bottom: 5px;
+            color: #000;
+            font-size: 2em;
         }
 
         p {
@@ -26,6 +29,11 @@
             margin-bottom: 20px;
             max-width: 800px;
             text-align: center;
+            font-size: 1rem;
+        }
+
+        svg text {
+            font-family: 'Avenir', 'Avenir Next', sans-serif !important;
         }
 
         .axis-label {
@@ -74,7 +82,8 @@
 <body>
     <h1>Global Financial Transactions by Purpose</h1>
     <p>
-        Commitment amount of the top 5 donation purposes between the top 20 donors and top 10 recipients.
+        Visualizing the distribution of the top 5 donation purposes
+        between the top 20 donors and top 10 recipients.
     </p>
 
     <div id="visualization"></div>
@@ -86,30 +95,29 @@
                 const text = d3.select(this);
                 const raw = text.text();
                 const words = raw.split(/\s+/).filter(Boolean);
-                if (!words.length || !width || width <= 0) {
-                    return;
-                }
+                if (!words.length || !width || width <= 0) { return; }
 
                 const x = text.attr("x");
                 const y = text.attr("y");
                 const baseDy = parseFloat(text.attr("dy")) || 0;
                 const lineHeight = 1.1;
 
-                // Temporary tspan for measuring candidate lines
-                const measureSpan = text.text(null)
-                    .append("tspan")
-                    .attr("x", x)
-                    .attr("y", y)
-                    .attr("dy", `${baseDy}em`);
-
+                const measureSpan = text
+                  .text(null)
+                  .append("tspan")
+                  .attr("x", x)
+                  .attr("y", y)
+                  .attr("dy", `${baseDy}em`);
                 const lines = [];
                 let currentLine = [];
 
                 words.forEach((word, idx) => {
                     currentLine.push(word);
                     measureSpan.text(currentLine.join(" "));
-
-                    if (measureSpan.node().getComputedTextLength() > width && currentLine.length > 1) {
+                    if (
+                      measureSpan.node().getComputedTextLength() > width
+                      && currentLine.length > 1
+                    ) {
                         currentLine.pop();
                         lines.push(currentLine.join(" "));
                         currentLine = [word];
@@ -118,328 +126,210 @@
                         lines.push(currentLine.join(" "));
                     }
                 });
-
                 measureSpan.remove();
 
                 const offset = (lines.length - 1) / 2;
                 lines.forEach((lineText, i) => {
-                    text.append("tspan")
-                        .attr("x", x)
-                        .attr("y", y)
-                        .attr("dy", `${baseDy + (i - offset) * lineHeight}em`)
-                        .text(lineText);
+                    text
+                      .append("tspan")
+                      .attr("x", x)
+                      .attr("y", y)
+                      .attr("dy", `${baseDy + (i - offset) * lineHeight}em`)
+                      .text(lineText);
                 });
             });
         }
 
         async function createVisualization() {
-            // 1. Load Data
-            const data = await d3.csv("AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv", d => ({
+            const data = await d3.csv(
+              "AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv",
+              d => ({
                 donor: d.donor,
                 recipient: d.recipient,
                 purpose: d.coalesced_purpose_name,
                 amount: +d.commitment_amount_usd_constant_sum
-            }));
+              })
+            );
 
-            // 2. Data Processing
-
-            // a. Find Top 5 Purposes (by total amount)
+            // Step A: Global Selection
             const purposeRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.purpose);
             const skipPurpose = "Sectors not specified";
-            const sortedPurposes = Array.from(purposeRollup)
-                .sort((a, b) => b[1] - a[1]);
-
+            const sortedPurposes = Array.from(purposeRollup).sort((a, b) => b[1] - a[1]);
             const topPurposes = [];
             for (const [purpose] of sortedPurposes) {
-                if (purpose === skipPurpose) {
-                    continue;
-                }
+                if (purpose === skipPurpose) continue;
                 topPurposes.push(purpose);
-                if (topPurposes.length === 5) {
-                    break;
-                }
+                if (topPurposes.length === 5) break;
             }
 
-            // b. Find Top 20 Donors (by total amount)
             const donorRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.donor);
             const topDonors = Array.from(donorRollup)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 20)
-                .map(d => d[0]);
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 20)
+              .map(d => d[0]);
 
-            // c. Find Top 10 Recipients (by total amount)
-            const recipientRollup = d3.rollup(data, v => d3.sum(v, d => d.amount), d => d.recipient);
+            const recipientRollup = d3.rollup(
+              data,
+              v => d3.sum(v, d => d.amount),
+              d => d.recipient
+            );
             const topRecipients = Array.from(recipientRollup)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10)
-                .map(d => d[0]);
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 10)
+              .map(d => d[0]);
 
-            // d. Filter Data
-            // Include only Top Donors, Top Recipients, and Top Purposes
-            const filteredData = data.filter(d => 
-                topDonors.includes(d.donor) && 
-                topRecipients.includes(d.recipient) && 
-                topPurposes.includes(d.purpose)
+            // Sorting Logic: Filter to transactions between Top D and Top R, ALL purposes
+            const sortingData = data.filter(
+              d => topDonors.includes(d.donor) && topRecipients.includes(d.recipient)
             );
 
-            // e. Group by (Donor, Recipient)
-            // Map: "Donor|Recipient" -> [ {purpose, amount}, ... ]
-            const matrixMap = d3.rollup(filteredData, 
+            const subsetDonorSums = d3.rollup(
+              sortingData,
+              v => d3.sum(v, d => d.amount),
+              d => d.donor
+            );
+            topDonors.sort(
+              (a, b) => (subsetDonorSums.get(b) || 0) - (subsetDonorSums.get(a) || 0)
+            );
+
+            const subsetRecipientSums = d3.rollup(
+              sortingData,
+              v => d3.sum(v, d => d.amount),
+              d => d.recipient
+            );
+            topRecipients.sort(
+              (a, b) => (subsetRecipientSums.get(b) || 0) - (subsetRecipientSums.get(a) || 0)
+            );
+
+            // Plotting Logic: Filter for Top 5 Purposes
+            const plottingData = sortingData.filter(d => topPurposes.includes(d.purpose));
+
+            const matrixMap = d3.rollup(plottingData, 
                 v => {
                     const total = d3.sum(v, d => d.amount);
-                    const purposes = d3.rollup(v, sum => d3.sum(sum, d => d.amount), d => d.purpose);
+                    const purposes = d3.rollup(
+                      v,
+                      sum => d3.sum(sum, d => d.amount),
+                      d => d.purpose
+                    );
                     return {
-                        total: total,
-                        breakdown: Array.from(purposes).map(([p, a]) => ({ purpose: p, amount: a }))
+                      total: total,
+                      breakdown: Array.from(purposes)
+                        .map(([p, a]) => ({ purpose: p, amount: a }))
                     };
                 },
-                d => d.donor,
-                d => d.recipient
+                d => d.donor, d => d.recipient
             );
 
-            // 3. Visualization Setup
             const cellSize = 40;
             const margin = { top: 150, right: 220, bottom: 50, left: 250 };
-            const width = topRecipients.length * cellSize; // Inner width
-            const height = topDonors.length * cellSize;    // Inner height
+            const width = topRecipients.length * cellSize;
+            const height = topDonors.length * cellSize;
             const pieRadius = cellSize * 0.35;
             
-            // Color Scale for Purposes (categorical)
-            const colorScale = d3.scaleOrdinal()
-                .domain(topPurposes)
-                .range(d3.schemeTableau10);
-
-            // Amount encoding domain + sequential color scale
+            const colorScale = d3.scaleOrdinal().domain(topPurposes).range(d3.schemeTableau10);
             const cellTotals = Array.from(matrixMap.values())
-                .flatMap(m => Array.from(m.values()).map(d => d.total));
+              .flatMap(m => Array.from(m.values()).map(d => d.total));
             const maxAmount = d3.max(cellTotals) || 0;
             const amountDomain = maxAmount > 0 ? [0, maxAmount] : [0, 1];
             const amountColorScale = d3.scaleLinear()
-                .domain(amountDomain)
-                .range(["#e0ecf4", "#08306b"]);
+              .domain(amountDomain)
+              .range(["#e0ecf4", "#08306b"]);
 
-            const rootSvg = d3.select("#visualization")
-                .append("svg")
+            const rootSvg = d3.select("#visualization").append("svg")
                 .attr("width", width + margin.left + margin.right)
                 .attr("height", height + margin.top + margin.bottom);
 
             const defs = rootSvg.append("defs");
+            const svg = rootSvg
+              .append("g")
+              .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
-            const svg = rootSvg.append("g")
-                .attr("transform", `translate(${margin.left}, ${margin.top})`);
-
-            // 4. Draw Axes
-            
-            // X Axis (Recipients) - Top
-            const xScale = d3.scaleBand()
-                .domain(topRecipients)
-                .range([0, width]);
-
+            const xScale = d3.scaleBand().domain(topRecipients).range([0, width]);
             svg.append("g")
-                .call(d3.axisTop(xScale))
-                .selectAll("text")
-                .attr("transform", "rotate(-45)")
-                .style("text-anchor", "start")
-                .attr("dx", "0.5em")
-                .attr("dy", "-0.5em");
-            
-            // X Axis Label
-            svg.append("text")
-                .attr("x", width / 2)
-                .attr("y", -110)
-                .style("text-anchor", "middle")
-                .style("font-weight", "bold")
-                .text("Top 10 Recipients");
+              .call(d3.axisTop(xScale))
+              .selectAll("text")
+              .attr("transform", "rotate(-45)")
+              .style("text-anchor", "start")
+              .attr("dx", "0.5em")
+              .attr("dy", "-0.5em");
+            svg
+              .append("text")
+              .attr("x", width / 2)
+              .attr("y", -110)
+              .style("text-anchor", "middle")
+              .style("font-weight", "bold")
+              .text("Top 10 Recipients");
 
-            // Y Axis (Donors) - Left
-            const yScale = d3.scaleBand()
-                .domain(topDonors)
-                .range([0, height]);
-
-            const yAxis = svg.append("g")
-                .call(d3.axisLeft(yScale));
-
+            const yScale = d3.scaleBand().domain(topDonors).range([0, height]);
+            const yAxis = svg.append("g").call(d3.axisLeft(yScale));
             wrapYAxisLabels(yAxis.selectAll("text"), margin.left - 50);
+            svg
+              .append("text")
+              .attr("transform", "rotate(-90)")
+              .attr("x", -height / 2)
+              .attr("y", -230)
+              .style("text-anchor", "middle")
+              .style("font-weight", "bold")
+              .text("Top 20 Donors");
 
-             // Y Axis Label
-             svg.append("text")
-                .attr("transform", "rotate(-90)")
-                .attr("x", -height / 2)
-                .attr("y", -230)
-                .style("text-anchor", "middle")
-                .style("font-weight", "bold")
-                .text("Top 20 Donors");
+            svg.selectAll(".grid-line-h").data(topDonors).enter().append("line").attr("class", "grid-line").attr("x1", 0).attr("x2", width).attr("y1", d => yScale(d)).attr("y2", d => yScale(d));
+            svg.selectAll(".grid-line-v").data(topRecipients).enter().append("line").attr("class", "grid-line").attr("y1", 0).attr("y2", height).attr("x1", d => xScale(d)).attr("x2", d => xScale(d));
+            svg.append("rect").attr("width", width).attr("height", height).style("fill", "none").style("stroke", "#ccc");
 
-            // 5. Draw Grid
-            // Horizontal lines
-            svg.selectAll(".grid-line-h")
-                .data(topDonors)
-                .enter()
-                .append("line")
-                .attr("class", "grid-line")
-                .attr("x1", 0)
-                .attr("x2", width)
-                .attr("y1", d => yScale(d))
-                .attr("y2", d => yScale(d));
-            
-            // Vertical lines
-            svg.selectAll(".grid-line-v")
-                .data(topRecipients)
-                .enter()
-                .append("line")
-                .attr("class", "grid-line")
-                .attr("y1", 0)
-                .attr("y2", height)
-                .attr("x1", d => xScale(d))
-                .attr("x2", d => xScale(d));
-
-            // Border
-            svg.append("rect")
-                .attr("width", width)
-                .attr("height", height)
-                .style("fill", "none")
-                .style("stroke", "#ccc");
-
-            // 6. Draw Cells & Glyphs
             const tooltip = d3.select("#tooltip");
-
-            // Iterate through all possible pairs to draw grid bg
             topDonors.forEach(donor => {
                 topRecipients.forEach(recipient => {
-                    const cellGroup = svg.append("g")
-                        .attr("transform", `translate(${xScale(recipient) + cellSize/2}, ${yScale(donor) + cellSize/2})`);
-                    
-                    // Data for this cell
+                    const cellGroup = svg.append("g").attr("transform", `translate(${xScale(recipient) + cellSize/2}, ${yScale(donor) + cellSize/2})`);
                     const cellData = matrixMap.get(donor)?.get(recipient);
                     const hasData = Boolean(cellData);
-
-                    // Background rect for hover target
-                    cellGroup.append("rect")
-                        .attr("x", -cellSize/2)
-                        .attr("y", -cellSize/2)
-                        .attr("width", cellSize)
-                        .attr("height", cellSize)
-                        .attr("class", "cell-bg")
-                        .attr("fill", hasData ? amountColorScale(cellData.total) : "transparent")
-                        .attr("fill-opacity", hasData ? 0.9 : 0);
+                    cellGroup.append("rect").attr("x", -cellSize/2).attr("y", -cellSize/2).attr("width", cellSize).attr("height", cellSize)
+                        .attr("class", "cell-bg").attr("fill", hasData ? amountColorScale(cellData.total) : "transparent").attr("fill-opacity", hasData ? 0.9 : 0);
 
                     if (hasData) {
-                        const pie = d3.pie()
-                            .value(d => d.amount)
-                            .sort(null); // Keep order or sort by size? strict order is better for comparison, but sorted is easier to read. Let's use default sort (desc).
-                        
+                        const pie = d3.pie().value(d => d.amount).sort(null);
                         const arcs = pie(cellData.breakdown);
-                        const radius = pieRadius;
-
-                        cellGroup.selectAll("path")
-                            .data(arcs)
-                            .enter()
-                            .append("path")
-                            .attr("d", d3.arc().innerRadius(0).outerRadius(radius))
-                            .attr("fill", d => colorScale(d.data.purpose))
-                            .style("stroke", "#fff")
-                            .style("stroke-width", "0.5px");
-
-                        // Tooltip Interaction
+                        cellGroup.selectAll("path").data(arcs).enter().append("path").attr("d", d3.arc().innerRadius(0).outerRadius(pieRadius))
+                            .attr("fill", d => colorScale(d.data.purpose)).style("stroke", "#fff").style("stroke-width", "0.5px");
+                        
                         cellGroup.on("mouseover", (event) => {
                             tooltip.style("opacity", 1);
-                            
                             let html = `<strong>${donor} → ${recipient}</strong><br/>`;
-                            html += `Total: $${d3.format(",.2f")(cellData.total)}<br/><hr/>`;
+                            html += `Displayed Total (Top 5 Purposes): $${d3.format(",.2f")(cellData.total)}<br/><hr/>`;
                             cellData.breakdown.sort((a,b) => b.amount - a.amount).forEach(item => {
                                 html += `<span style="color:${colorScale(item.purpose)}">■</span> ${item.purpose}: $${d3.format(",.0f")(item.amount)} (${d3.format(".1%")(item.amount/cellData.total)})<br/>`;
                             });
-
-                            tooltip.html(html)
-                                .style("left", (event.pageX + 15) + "px")
-                                .style("top", (event.pageY - 28) + "px");
-                        })
-                        .on("mousemove", (event) => {
-                            tooltip
-                                .style("left", (event.pageX + 15) + "px")
-                                .style("top", (event.pageY - 28) + "px");
-                        })
-                        .on("mouseout", () => {
-                            tooltip.style("opacity", 0);
-                        });
+                            tooltip.html(html).style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+                        }).on("mousemove", (event) => {
+                            tooltip.style("left", (event.pageX + 15) + "px").style("top", (event.pageY - 28) + "px");
+                        }).on("mouseout", () => { tooltip.style("opacity", 0); });
                     }
                 });
             });
 
-            // 7. Legend
-            const legend = svg.append("g")
-                .attr("class", "legend")
-                .attr("transform", `translate(${width + 20}, 0)`);
-
-            legend.append("text")
-                .attr("x", 0)
-                .attr("y", -10)
-                .style("font-weight", "bold")
-                .text("Purposes");
-
+            const legend = svg.append("g").attr("class", "legend").attr("transform", `translate(${width + 20}, 0)`);
+            legend.append("text").attr("x", 0).attr("y", -10).style("font-weight", "bold").text("Top 5 Purposes");
             topPurposes.forEach((purpose, i) => {
-                const row = legend.append("g")
-                    .attr("transform", `translate(0, ${i * 20})`);
-                
-                row.append("rect")
-                    .attr("width", 12)
-                    .attr("height", 12)
-                    .attr("fill", colorScale(purpose));
-                
-                row.append("text")
-                    .attr("x", 20)
-                    .attr("y", 10)
-                    .text(purpose);
+                const row = legend.append("g").attr("transform", `translate(0, ${i * 20})`);
+                row.append("rect").attr("width", 12).attr("height", 12).attr("fill", colorScale(purpose));
+                row.append("text").attr("x", 20).attr("y", 10).text(purpose);
             });
 
             const gradientId = "amount-gradient";
-            const gradient = defs.append("linearGradient")
-                .attr("id", gradientId)
-                .attr("x1", "0%")
-                .attr("x2", "0%")
-                .attr("y1", "100%")
-                .attr("y2", "0%");
-
-            gradient.append("stop")
-                .attr("offset", "0%")
-                .attr("stop-color", amountColorScale(amountDomain[0]));
-
-            gradient.append("stop")
-                .attr("offset", "100%")
-                .attr("stop-color", amountColorScale(amountDomain[1]));
+            const gradient = defs.append("linearGradient").attr("id", gradientId).attr("x1", "0%").attr("x2", "0%").attr("y1", "100%").attr("y2", "0%");
+            gradient.append("stop").attr("offset", "0%").attr("stop-color", amountColorScale(amountDomain[0]));
+            gradient.append("stop").attr("offset", "100%").attr("stop-color", amountColorScale(amountDomain[1]));
 
             const gradientHeight = 140;
-            const amountLegend = svg.append("g")
-                .attr("class", "legend")
-                .attr("transform", `translate(${width + 20}, ${topPurposes.length * 20 + 40})`);
+            const amountLegend = svg.append("g").attr("class", "legend").attr("transform", `translate(${width + 20}, ${topPurposes.length * 20 + 40})`);
+            amountLegend.append("text").attr("x", 0).attr("y", -10).style("font-weight", "bold").text("Displayed Amount");
+            amountLegend.append("rect").attr("width", 18).attr("height", gradientHeight).attr("fill", `url(#${gradientId})`);
 
-            amountLegend.append("text")
-                .attr("x", 0)
-                .attr("y", -10)
-                .style("font-weight", "bold")
-                .text("Total amount");
-
-            amountLegend.append("rect")
-                .attr("width", 18)
-                .attr("height", gradientHeight)
-                .attr("fill", `url(#${gradientId})`);
-
-            const legendScale = d3.scaleLinear()
-                .domain(amountDomain)
-                .range([gradientHeight, 0]);
-
+            const legendScale = d3.scaleLinear().domain(amountDomain).range([gradientHeight, 0]);
             const tickValues = legendScale.ticks(6);
-            if (!tickValues.includes(0)) {
-                tickValues.push(0);
-            }
-
-            const legendAxis = d3.axisRight(legendScale)
-                .tickValues(tickValues.sort((a, b) => a - b))
-                .tickFormat(d => d === 0 ? "0" : d3.format(".2s")(d));
-
-            amountLegend.append("g")
-                .attr("transform", "translate(18, 0)")
-                .call(legendAxis);
+            if (!tickValues.includes(0)) tickValues.push(0);
+            const legendAxis = d3.axisRight(legendScale).tickValues(tickValues.sort((a, b) => a - b)).tickFormat(d => d === 0 ? "0" : d3.format(".2s")(d).replace("G", "B"));
+            amountLegend.append("g").attr("transform", "translate(18, 0)").call(legendAxis);
         }
 
         createVisualization();
