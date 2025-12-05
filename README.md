@@ -1,13 +1,13 @@
 # VisTS – Multi-Perspective Visualization of Global Aid Flows
 
-This project explores the **AidData donor–recipient dataset (1947–2013)** using three complementary web-based visualizations.  
+This project explores the **AidData donor–recipient dataset (1947–2013)** using three complementary web-based visualizations.
 Across all views we focus on:
 
 - **Top 20 donors** (countries and multilateral institutions)
 - **Top 10 recipients**
 - **Top 5 aid purposes** (for the purpose-based view)
 
-Together, the three pages help answer:
+Together, the three visualizations help answer:
 
 - Who are the major donors and recipients?
 - How much do they give or receive, and with whom?
@@ -15,30 +15,32 @@ Together, the three pages help answer:
 - How do these relationships change over time?
 
 
+
 ## How to run
 
-1. Use python to open a server`python -m http.server 8001` or `python3 -m http.server 8001` depends on your python version
+1. Use python to open a server: `python -m http.server 8001` or `python3 -m http.server 8001`;
 
-2. Make sure the CSVs (AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv) is in the same directory with `index.html`, `index_1.html`, `index_2.html`, `index_3.html`
+2. Make sure the CSV (AidDataCoreDonorRecipientYearPurpose_ResearchRelease_Level1_v3.1.csv) is in the same directory with `index.html`, `index_1.html`, `index_2.html`, and `index_3.html`;
 
-3. You can use the button on the top to switch the charts from `index_1.html` to `index_3.html`
+3. Open the URL http://localhost:8001/index.html;
 
-3. Open the URL http://localhost:8001/index.html
+4. Use **Ctrl + mouse wheel** to zoom out the webpage to 80% or another suitable scale to fit the visualization charts;
 
+5. Use the buttons on the top of the webpage to switch between **Visualization 1**, **Visualization 2**, and **Visualization 3**.
 
 
 
 ## Visualization 1 – Aid Flow Overview (`index_1.html`)
 
-**Goal:**  
+**Goal:**
 Give a **high-level overview of who donates to whom and how much** among the main actors in the global aid system.
 
-**Design:**  
+**Design:**
 
 - **Sankey diagram**
   - **Left nodes:** top 20 donors (countries + multilateral institutions)
   - **Right nodes:** top 10 recipients
-  - **Links:** flows from donor → recipient  
+  - **Links:** flows from donor → recipient
     - Link **thickness** encodes total commitment amount.
 - **Color encoding**
   - Donors use a cool gradient; recipients use a warm gradient.
@@ -54,10 +56,11 @@ Give a **high-level overview of who donates to whom and how much** among the mai
 - Hover / click (if enabled) to see detailed information in the insight panel (exact amounts and ranked partners).
 
 
+
 ## Visualization 2 – Purpose-Based Decomposition (`index_2.html`)
 
-**Goal:**  
-Show **what the money is used for** by breaking aid flows into the **top 5 purpose categories** for each donor–recipient pair.  
+**Goal:**
+Show **what the money is used for** by breaking aid flows into the **top 5 purpose categories** for each donor–recipient pair.
 Questions it supports:
 
 - Do donors support a recipient across many sectors or concentrate on one?
@@ -66,8 +69,8 @@ Questions it supports:
 **Design:**
 
 - **Matrix layout**
-  - **Rows:** top 20 donors  
-  - **Columns:** top 10 recipients  
+  - **Rows:** top 20 donors
+  - **Columns:** top 10 recipients
   - Each cell = one **donor–recipient pair**.
 - **Embedded pie charts**
   - Each cell contains a pie chart showing the **proportion** of the top 5 purposes for that pair.
@@ -84,10 +87,11 @@ Questions it supports:
   - A ranked breakdown of each purpose in both **dollar value and percentage share**.
 
 
+
 ## Visualization 3 – Temporal Dynamics (`index_3.html`)
 
-**Goal:**  
-Reveal **how aid relationships change over time**: which partnerships grow, decline, or remain stable.  
+**Goal:**
+Reveal **how aid relationships change over time**: which partnerships grow, decline, or remain stable.
 Questions it supports:
 
 - How does a donor’s total aid change year by year?
@@ -116,4 +120,3 @@ Questions it supports:
 3. Hover over a band to:
    - See precise year-by-year values.
    - Temporarily fade other bands to highlight one recipient’s trajectory.
-
